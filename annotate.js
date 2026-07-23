@@ -713,7 +713,20 @@
     #__an_compose { width: min(304px, calc(100vw - 16px)); }
     .an-btn[data-tip]:hover::after { display:none; }
     #__an_hint { font-size:11px; padding:7px 12px; }
-    #__an_bar { padding:6px; gap:4px; }
+    #__an_bar,
+    #__an_bar.an-left,
+    #__an_bar.an-right {
+      left:50%;
+      right:auto;
+      bottom:10px;
+      display:grid;
+      grid-template-columns:repeat(5, 36px);
+      gap:4px;
+      padding:6px;
+      transform:translateX(-50%);
+      animation:none;
+    }
+    #__an_bar .an-sep { display:none; }
     .an-btn { width:36px; height:36px; }
     #__an_colorbtn { width:36px; height:36px; }
     #__an_panel .an-list { -webkit-overflow-scrolling: touch; }

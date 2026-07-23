@@ -5,62 +5,44 @@ description: Send a Markdown plan, proposal, runbook, or code-review summary to 
 
 # Annotate Review
 
-Use `reviewctl` to put a document in the cluster review room. The human can pin comments directly to the rendered Markdown, request changes, or approve it. Treat the returned decision as the source of truth for the next step.
+Use `reviewctl` to open a document in the LAN review room and wait for the human's comments. This is one provider-neutral interaction: the same flow returns feedback to Claude, Codex, Gemini, Goose, or any other invoking agent.
 
-## Submit
+## Open the review
 
 1. Put the exact review packet in a Markdown file. Include decisions and verification steps that need human judgment; do not dump unrelated logs.
 2. Confirm the CLI is available with `command -v reviewctl`. If it is missing, stop and report that this skill needs the `reviewctl` binary from the Annotate repository.
-3. Submit it:
+3. Start the single open-and-wait command with a short initial yield:
 
 ```bash
-reviewctl submit --format json --title "Short review title" path/to/review.md
+reviewctl review --title "Short review title" path/to/review.md
 ```
 
-The cockpit-safe default server is `http://10.0.0.207`; LAN browsers can also use `http://annotate.lan`. Override it only with the user's known endpoint:
+The CLI opens the system browser when one is attached. In Litewindow it prints the room URL immediately; give that URL to the user as a clickable link, then keep the same process running. Do not make the user handle a session ID or run another command.
+
+The cockpit-safe endpoint is `http://10.0.0.207`; LAN browsers can use `http://annotate.lan`. Override it only with the user's known endpoint:
 
 ```bash
-REVIEW_SERVER_URL=http://host reviewctl submit --format json path/to/review.md
+REVIEW_SERVER_URL=http://host reviewctl review path/to/review.md
 ```
 
-4. Give the user the returned `url` and retain the returned session `id`.
+The human pins comments, optionally adds an overall note, and presses **Send comments to agent**. They can instead press **Approve and continue** when no changes are needed.
 
-## Receive the decision
+## Continue from the result
 
-For a quick check:
+The original `reviewctl review` process returns the result directly:
 
-```bash
-reviewctl status --format json SESSION_ID
-```
-
-To wait in a shell that supports a long-running command:
-
-```bash
-reviewctl wait --format json --timeout 30m SESSION_ID
-```
-
-Keep the user updated while waiting. A pending review is not approval.
-
-- `approved`: continue the already-authorized plan.
-- `changes_requested`: exit code `3`; read stdout despite the non-zero exit, apply the `summary` and every `feedback` item, then submit a new review if the user requested another approval pass.
-- Missing or expired session: report it and create a new room only if the original document is still current.
+- `APPROVED`, exit `0`: continue the already-authorized work.
+- `FEEDBACK RECEIVED`, exit `3`: this is a normal review result, not a command failure. Read the note and every comment from stdout, apply them, and open another room only if the user asked for another pass.
+- An operational error, exit `1` or `2`: report it. Create a new room only if the original document is still current.
 
 Approval does not expand task scope or authorize a destructive action that was not already requested.
 
-## Agent and hook output
+## Low-level recovery only
 
-`--format json` is provider-neutral and is the preferred skill interface. The output contains `status`, `summary`, and the full Annotate comment objects in `feedback`.
-
-For a Claude Code `PreToolUse` hook, emit only the hook payload on stdout:
+If the open-and-wait process was lost, `reviewctl status <id>` and `reviewctl wait <id>` exist for debugging. Do not expose this plumbing in the normal human flow.
 
 ```bash
-reviewctl wait --format claude-hook SESSION_ID
+reviewctl review --no-open path/to/review.md
 ```
 
-Approval maps to `permissionDecision: allow`; requested changes map to `deny` with the review summary and annotations in `permissionDecisionReason`. Operational messages and the room URL go to stderr when using `reviewctl review`.
-
-For a single submit-and-wait workflow:
-
-```bash
-reviewctl review --format json --title "Release plan" path/to/plan.md
-```
+Use `--no-open` only in automation that cannot launch a browser; the URL is still printed.

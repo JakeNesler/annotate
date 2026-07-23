@@ -10,7 +10,9 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -18,6 +20,8 @@ import (
 )
 
 const defaultServer = "http://10.0.0.207"
+
+var openURL = openBrowser
 
 type client struct {
 	base string
@@ -157,6 +161,7 @@ func runReview(args []string, stdout, stderr io.Writer) int {
 	format := fs.String("format", "text", "decision output format: text, json, or claude-hook")
 	interval := fs.Duration("interval", 2*time.Second, "poll interval")
 	timeout := fs.Duration("timeout", 0, "maximum wait; zero waits indefinitely")
+	noOpen := fs.Bool("no-open", false, "print the review URL without launching a browser")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -178,7 +183,14 @@ func runReview(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	fmt.Fprintf(stderr, "Review opened: %s\nWaiting for a decision on %s...\n", created.URL, created.ID)
+	if *noOpen {
+		fmt.Fprintf(stderr, "Open this review: %s\n", created.URL)
+	} else if err := openURL(created.URL); err != nil {
+		fmt.Fprintf(stderr, "Open this review: %s\n", created.URL)
+	} else {
+		fmt.Fprintf(stderr, "Review opened in your browser: %s\n", created.URL)
+	}
+	fmt.Fprintln(stderr, "Waiting for your comments…")
 	session, err := c.wait(context.Background(), created.ID, *interval, *timeout)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
@@ -309,19 +321,19 @@ func writeDecision(w io.Writer, session *review.Session, format string) error {
 		})
 	case "text":
 		if session.Status == review.StatusPending {
-			fmt.Fprintf(w, "PENDING\nSession: %s\n", session.ID)
+			fmt.Fprintln(w, "PENDING")
 			return nil
 		}
 		if session.Status == review.StatusApproved {
 			fmt.Fprintln(w, "APPROVED")
 		} else {
-			fmt.Fprintln(w, "CHANGES REQUESTED")
+			fmt.Fprintln(w, "FEEDBACK RECEIVED")
 		}
 		if out.Summary != "" {
-			fmt.Fprintf(w, "Summary: %s\n", out.Summary)
+			fmt.Fprintf(w, "Note: %s\n", out.Summary)
 		}
 		if len(out.Feedback) > 0 {
-			fmt.Fprintln(w, "Feedback:")
+			fmt.Fprintln(w, "Comments:")
 			for _, item := range out.Feedback {
 				fmt.Fprintf(w, "- %s\n", describeFeedback(item))
 			}
@@ -347,21 +359,52 @@ func feedbackReason(out decisionOutput) string {
 }
 
 func describeFeedback(raw json.RawMessage) string {
-	var item map[string]any
-	if json.Unmarshal(raw, &item) == nil {
-		text, _ := item["text"].(string)
-		kind, _ := item["type"].(string)
-		author, _ := item["author"].(string)
-		if text != "" {
-			prefix := ""
-			if kind != "" {
-				prefix = "[" + kind + "] "
-			}
-			if author != "" {
-				return prefix + text + " — " + author
-			}
-			return prefix + text
+	var item struct {
+		Type   string `json:"type"`
+		Text   string `json:"text"`
+		Author string `json:"author"`
+		Anchor struct {
+			Exact string `json:"exact"`
+		} `json:"anchor"`
+		Geom struct {
+			Selector string   `json:"selector"`
+			X        *float64 `json:"x"`
+			Y        *float64 `json:"y"`
+		} `json:"geom"`
+		Replies []struct {
+			Author string `json:"author"`
+			Text   string `json:"text"`
+		} `json:"replies"`
+	}
+	if json.Unmarshal(raw, &item) == nil && item.Text != "" {
+		var description strings.Builder
+		if item.Type != "" {
+			fmt.Fprintf(&description, "[%s] ", item.Type)
 		}
+		description.WriteString(item.Text)
+		if item.Anchor.Exact != "" {
+			fmt.Fprintf(&description, " (on %q)", item.Anchor.Exact)
+		} else if item.Geom.Selector != "" {
+			fmt.Fprintf(&description, " (at %s", item.Geom.Selector)
+			if item.Geom.X != nil && item.Geom.Y != nil {
+				fmt.Fprintf(&description, ", %.0f%% across / %.0f%% down", *item.Geom.X*100, *item.Geom.Y*100)
+			}
+			description.WriteString(")")
+		}
+		if item.Author != "" {
+			fmt.Fprintf(&description, " — %s", item.Author)
+		}
+		for _, reply := range item.Replies {
+			if strings.TrimSpace(reply.Text) == "" {
+				continue
+			}
+			description.WriteString("; reply")
+			if reply.Author != "" {
+				fmt.Fprintf(&description, " from %s", reply.Author)
+			}
+			fmt.Fprintf(&description, ": %s", reply.Text)
+		}
+		return description.String()
 	}
 	return string(raw)
 }
@@ -402,16 +445,52 @@ func serverDefault() string {
 	return defaultServer
 }
 
+func openBrowser(url string) error {
+	if strings.TrimSpace(os.Getenv("LW_SESSION_ID")) != "" {
+		return errors.New("Litewindow opens links from the active agent message")
+	}
+
+	var command string
+	var args []string
+	switch runtime.GOOS {
+	case "darwin":
+		command = "open"
+		args = []string{url}
+	case "windows":
+		command = "rundll32"
+		args = []string{"url.dll,FileProtocolHandler", url}
+	default:
+		if strings.TrimSpace(os.Getenv("DISPLAY")) == "" && strings.TrimSpace(os.Getenv("WAYLAND_DISPLAY")) == "" {
+			return errors.New("no graphical browser session")
+		}
+		command = "xdg-open"
+		args = []string{url}
+	}
+
+	path, err := exec.LookPath(command)
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(path, args...)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	return cmd.Process.Release()
+}
+
 func usage(w io.Writer) {
-	fmt.Fprintln(w, `reviewctl — send markdown to the cluster review room
+	fmt.Fprintln(w, `reviewctl — review markdown with a human in the cluster review room
 
 Usage:
+  reviewctl review [flags] <file|->   open a browser, then wait for comments
   reviewctl submit [flags] <file|->   create a review and print its URL
   reviewctl status [flags] <id>       print the current decision
   reviewctl wait [flags] <id>         wait for structured reviewer feedback
-  reviewctl review [flags] <file|->   submit and wait in one command
 
 Set REVIEW_SERVER_URL to override http://10.0.0.207.
-Decision formats: text, json, claude-hook.
-Exit code 3 means changes were requested.`)
+The normal review flow is provider-neutral: Claude, Codex, Gemini, Goose, or any
+other calling agent receives the same comments on stdout.
+Exit code 3 means feedback was returned; it is not an operational failure.`)
 }

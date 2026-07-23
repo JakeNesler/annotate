@@ -9,7 +9,7 @@
   var expires = document.getElementById("expires-at");
   var summary = document.getElementById("decision-summary");
   var approve = document.getElementById("approve");
-  var requestChanges = document.getElementById("request-changes");
+  var sendFeedback = document.getElementById("send-feedback");
   var error = document.getElementById("decision-error");
   var result = document.getElementById("decision-result");
   var copy = document.getElementById("copy-room-link");
@@ -18,10 +18,11 @@
   function setStatus(status) {
     currentStatus = status;
     statusChip.className = "status-chip " + status;
-    statusChip.innerHTML = '<i aria-hidden="true"></i> ' + status.replace("_", " ").toUpperCase();
+    var label = status === "changes_requested" ? "COMMENTS SENT" : status.replace("_", " ").toUpperCase();
+    statusChip.innerHTML = '<i aria-hidden="true"></i> ' + label;
     var decided = status !== "pending";
     approve.disabled = decided;
-    requestChanges.disabled = decided;
+    sendFeedback.disabled = decided;
     summary.disabled = decided;
     if (decided && window.Annotate) window.Annotate.disable();
   }
@@ -55,7 +56,7 @@
       if (payload.status !== "pending") {
         result.textContent = payload.status === "approved"
           ? "Approved. The waiting agent can continue."
-          : "Changes sent. The waiting agent has the annotations.";
+          : "Comments sent. The waiting agent will resume with your feedback.";
         result.hidden = false;
       }
     } catch (err) {
@@ -63,7 +64,7 @@
       content.innerHTML = "<p>" + escapeHTML(err.message || "Could not load this review") + "</p>";
       showError(err.message || "Could not load this review");
       approve.disabled = true;
-      requestChanges.disabled = true;
+      sendFeedback.disabled = true;
     }
   }
 
@@ -75,11 +76,11 @@
       ? window.Annotate.comments().filter(function (comment) { return !comment.resolved; })
       : [];
     if (decision === "changes_requested" && !summary.value.trim() && feedback.length === 0) {
-      showError("Pin at least one annotation or add a decision note.");
+      showError("Pin at least one comment or add an overall note before sending.");
       return;
     }
     approve.disabled = true;
-    requestChanges.disabled = true;
+    sendFeedback.disabled = true;
     try {
       var response = await fetch("/api/sessions/" + encodeURIComponent(id) + "/decision", {
         method: "POST",
@@ -95,11 +96,11 @@
       setStatus(payload.status);
       result.textContent = payload.status === "approved"
         ? "Approved. The waiting agent can continue."
-        : "Changes sent. The waiting agent has the annotations.";
+        : "Comments sent. The waiting agent will resume with your feedback.";
       result.hidden = false;
     } catch (err) {
       approve.disabled = false;
-      requestChanges.disabled = false;
+      sendFeedback.disabled = false;
       showError(err.message || "Could not save the decision");
     }
   }
@@ -111,7 +112,7 @@
   }
 
   approve.addEventListener("click", function () { decide("approved"); });
-  requestChanges.addEventListener("click", function () { decide("changes_requested"); });
+  sendFeedback.addEventListener("click", function () { decide("changes_requested"); });
   copy.addEventListener("click", async function () {
     try {
       await navigator.clipboard.writeText(location.href);

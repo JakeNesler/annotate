@@ -527,12 +527,15 @@ textarea:focus {
   margin: 12px 0 0;
 }
 
-.decision-form .secondary-action {
+.decision-form .send-feedback {
   margin-top: 18px;
 }
 
 .decision-form .approve {
   margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .rail-foot {
@@ -561,6 +564,7 @@ textarea:focus {
 
   .decision-rail {
     min-height: auto;
+    order: -1;
     position: static;
   }
 
@@ -633,6 +637,20 @@ textarea:focus {
     font-size: 42px;
   }
 
+  .decision-rail {
+    gap: 20px;
+    padding-top: 28px;
+    padding-bottom: 32px;
+  }
+
+  .decision-rail h2 {
+    font-size: 36px;
+  }
+
+  .decision-form textarea {
+    min-height: 80px;
+  }
+
   .markdown-body {
     padding-top: 34px;
     font-size: 17px;
@@ -644,6 +662,12 @@ textarea:focus {
 
   .markdown-body h2 {
     font-size: 30px;
+  }
+}
+
+@media (max-width: 360px) {
+  .decision-rail .rail-copy {
+    display: none;
   }
 }
 

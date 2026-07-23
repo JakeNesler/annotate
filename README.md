@@ -20,20 +20,20 @@ That single line is the whole installation.
 ## Cluster review room (this fork)
 
 This fork adds an optional, single-replica review service for agent plans and
-Markdown documents. It renders the document, overlays `annotate.js`, and returns
-an approval or structured change request to `reviewctl`.
+Markdown documents. It opens the document in a browser, overlays `annotate.js`,
+and sends the human's comments back to the waiting CLI agent.
 
 ```bash
 # Run the room locally
 go run ./cmd/reviewd
 
-# In another shell: submit and wait
-go run ./cmd/reviewctl submit --server http://localhost:8080 plan.md
-go run ./cmd/reviewctl wait --server http://localhost:8080 SESSION_ID
+# In another shell: open the page and wait for the reviewer
+go run ./cmd/reviewctl review --server http://localhost:8080 plan.md
 ```
 
-`reviewctl wait --format json` is provider-neutral.
-`reviewctl wait --format claude-hook` emits a Claude Code `PreToolUse` decision.
+The normal flow is provider-neutral: Claude, Codex, Gemini, Goose, or any other
+CLI agent receives the same plain-text comments on stdout. `reviewctl` launches
+the system browser when it can and always prints the network URL as a fallback.
 Sessions are intentionally ephemeral and expire after 24 hours. The supplied
 `deploy.yaml` exposes the room on the dev LAN through the IDP/Flux contract.
 

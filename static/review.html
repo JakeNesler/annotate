@@ -33,26 +33,29 @@
 
       <aside class="decision-rail" aria-labelledby="decision-title">
         <div>
-          <p class="eyebrow">Final call</p>
-          <h2 id="decision-title">Ship it or shape it.</h2>
-          <p class="rail-copy">Use the orange review tools to pin feedback directly to the plan, then return one decision to the waiting agent.</p>
+          <p class="eyebrow">Send it back</p>
+          <h2 id="decision-title">Point. Comment. Continue.</h2>
+          <p class="rail-copy">Pin comments directly to the document, then send them to the waiting agent. Claude, Codex, Gemini—it goes back to whoever opened this room.</p>
         </div>
 
         <div class="decision-form">
-          <label for="decision-summary">Decision note <span>optional</span></label>
-          <textarea id="decision-summary" placeholder="What needs to change, or why this is ready…"></textarea>
+          <label for="decision-summary">Overall note <span>optional</span></label>
+          <textarea id="decision-summary" placeholder="Add context that does not belong on one specific pin…"></textarea>
           <p id="decision-error" class="form-message error" role="alert" hidden></p>
           <p id="decision-result" class="form-message success" role="status" hidden></p>
-          <button id="request-changes" class="secondary-action" type="button">Request changes</button>
-          <button id="approve" class="primary-action approve" type="button">
-            <span>Approve plan</span>
+          <button id="send-feedback" class="primary-action send-feedback" type="button">
+            <span>Send comments to agent</span>
+            <span aria-hidden="true">→</span>
+          </button>
+          <button id="approve" class="secondary-action approve" type="button">
+            <span>Approve and continue</span>
             <span aria-hidden="true">✓</span>
           </button>
         </div>
 
         <div class="rail-foot">
           <button id="copy-room-link" class="text-button" type="button">Copy room link</button>
-          <span>Annotations stay private until you decide.</span>
+          <span>Nothing is sent until you press the orange button.</span>
         </div>
       </aside>
     </main>
