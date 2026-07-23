@@ -17,7 +17,7 @@ Use `reviewctl` to put a document in the cluster review room. The human can pin 
 reviewctl submit --format json --title "Short review title" path/to/review.md
 ```
 
-The default server is `http://annotate.lan`. Override it only with the user's known endpoint:
+The cockpit-safe default server is `http://10.0.0.207`; LAN browsers can also use `http://annotate.lan`. Override it only with the user's known endpoint:
 
 ```bash
 REVIEW_SERVER_URL=http://host reviewctl submit --format json path/to/review.md

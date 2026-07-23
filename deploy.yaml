@@ -14,7 +14,7 @@ probes:
 expose:
   lan: true
   host: annotate.lan
-  pool: pool-high
+  ip: 10.0.0.207
   port: 80
 logging:
   enabled: true

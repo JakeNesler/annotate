@@ -17,7 +17,7 @@ import (
 	"github.com/JakeNesler/annotate/internal/review"
 )
 
-const defaultServer = "http://annotate.lan"
+const defaultServer = "http://10.0.0.207"
 
 type client struct {
 	base string
@@ -411,7 +411,7 @@ Usage:
   reviewctl wait [flags] <id>         wait for structured reviewer feedback
   reviewctl review [flags] <file|->   submit and wait in one command
 
-Set REVIEW_SERVER_URL to override http://annotate.lan.
+Set REVIEW_SERVER_URL to override http://10.0.0.207.
 Decision formats: text, json, claude-hook.
 Exit code 3 means changes were requested.`)
 }
