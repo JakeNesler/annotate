@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Annotate Review Room</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+    <script src="/assets/launcher.js" defer></script>
+  </head>
+  <body class="launcher">
+    <header class="masthead">
+      <a class="wordmark" href="/" aria-label="Annotate Review Room home">
+        <span class="wordmark-mark" aria-hidden="true">A</span>
+        <span>ANNOTATE / REVIEW ROOM</span>
+      </a>
+      <span class="signal"><i aria-hidden="true"></i> CLUSTER LIVE</span>
+    </header>
+
+    <main class="launch-grid">
+      <section class="intro" aria-labelledby="page-title">
+        <p class="eyebrow">Human judgment, back in the loop</p>
+        <h1 id="page-title">Put the plan<br><em>on the wall.</em></h1>
+        <p class="lede">Drop in Markdown. Mark it up in the browser. Send one structured decision straight back to the agent or CLI.</p>
+        <ol class="steps" aria-label="How it works">
+          <li><span>01</span> Submit the plan</li>
+          <li><span>02</span> Pin precise feedback</li>
+          <li><span>03</span> Approve or send it back</li>
+        </ol>
+      </section>
+
+      <section class="launch-card" aria-labelledby="form-title">
+        <div class="card-kicker">
+          <span id="form-title">New review</span>
+          <span>Expires in 24h</span>
+        </div>
+        <form id="review-form">
+          <label for="title">Title</label>
+          <input id="title" name="title" maxlength="200" placeholder="Deployment plan" autocomplete="off">
+
+          <label for="markdown">Markdown</label>
+          <textarea id="markdown" name="markdown" required placeholder="# The plan&#10;&#10;1. Make the change&#10;2. Run the gates&#10;3. Reconcile through Flux"></textarea>
+
+          <p id="form-error" class="form-message error" role="alert" hidden></p>
+          <button class="primary-action" type="submit">
+            <span>Open review room</span>
+            <span aria-hidden="true">↗</span>
+          </button>
+        </form>
+
+        <div id="review-created" class="created" hidden>
+          <span class="created-label">Room ready</span>
+          <a id="review-link" href="">Open the review ↗</a>
+          <button id="copy-link" class="text-button" type="button">Copy link</button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-foot">
+      <span>LAN ONLY / EPHEMERAL SESSIONS</span>
+      <span>POWERED BY ANNOTATE.JS</span>
+    </footer>
+  </body>
+</html>

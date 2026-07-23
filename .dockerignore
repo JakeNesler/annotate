@@ -1,0 +1,12 @@
+.git
+.github
+.mission
+bakes
+node_modules
+playwright-report
+test-results
+tests
+review-tests
+examples
+*.md
+*.png

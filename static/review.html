@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Review · Annotate</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+    <script src="/assets/review.js" defer></script>
+    <script src="/annotate.js" data-project="review-room" data-theme="dark" data-accent="#ff6b35" data-position="bottom-left" data-start-open="true" defer></script>
+  </head>
+  <body class="review-page">
+    <header class="masthead review-masthead">
+      <a class="wordmark" href="/" aria-label="Annotate Review Room home">
+        <span class="wordmark-mark" aria-hidden="true">A</span>
+        <span>ANNOTATE / REVIEW ROOM</span>
+      </a>
+      <span id="room-status" class="status-chip pending"><i aria-hidden="true"></i> PENDING</span>
+    </header>
+
+    <main class="review-shell">
+      <article class="document">
+        <header class="document-header">
+          <p class="eyebrow">Review packet</p>
+          <h1 id="review-title">Loading review…</h1>
+          <div class="document-meta">
+            <span id="session-id">SESSION —</span>
+            <span id="expires-at">EXPIRES —</span>
+          </div>
+        </header>
+        <div id="review-content" class="markdown-body" aria-live="polite"></div>
+      </article>
+
+      <aside class="decision-rail" aria-labelledby="decision-title">
+        <div>
+          <p class="eyebrow">Final call</p>
+          <h2 id="decision-title">Ship it or shape it.</h2>
+          <p class="rail-copy">Use the orange review tools to pin feedback directly to the plan, then return one decision to the waiting agent.</p>
+        </div>
+
+        <div class="decision-form">
+          <label for="decision-summary">Decision note <span>optional</span></label>
+          <textarea id="decision-summary" placeholder="What needs to change, or why this is ready…"></textarea>
+          <p id="decision-error" class="form-message error" role="alert" hidden></p>
+          <p id="decision-result" class="form-message success" role="status" hidden></p>
+          <button id="request-changes" class="secondary-action" type="button">Request changes</button>
+          <button id="approve" class="primary-action approve" type="button">
+            <span>Approve plan</span>
+            <span aria-hidden="true">✓</span>
+          </button>
+        </div>
+
+        <div class="rail-foot">
+          <button id="copy-room-link" class="text-button" type="button">Copy room link</button>
+          <span>Annotations stay private until you decide.</span>
+        </div>
+      </aside>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Annotate Review"
+  short_description: "Send plans to the cluster review room and apply human feedback"
+  default_prompt: "Use $annotate-review to open this plan for visual review and wait for the decision."

@@ -19,6 +19,7 @@
     "test": "playwright test",
     "test:chromium": "playwright test --project=chromium",
     "test:mobile": "playwright test --project=mobile-chrome --project=mobile-safari",
+    "test:review": "playwright test --config=playwright.review.config.js",
     "test:report": "playwright show-report"
   },
   "keywords": [

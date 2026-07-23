@@ -1,0 +1,22 @@
+app: annotate
+runtime:
+  image: ghcr.io/jakenesler/annotate
+  port: 8080
+build:
+  context: .
+  dockerfile: Dockerfile
+sizing:
+  profile: minimal
+  replicas: 1
+probes:
+  type: http
+  path: /health
+expose:
+  lan: true
+  host: annotate.lan
+  pool: pool-high
+  port: 80
+logging:
+  enabled: true
+metrics:
+  enabled: false

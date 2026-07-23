@@ -1073,4 +1073,21 @@ test.describe('Architectural improvements', () => {
     const count2 = await page.evaluate(() => window.Annotate.comments().length);
     expect(count2).toBeGreaterThan(count1);
   });
+
+  test('overlay shrinks after desktop to mobile resize', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.evaluate(() => window.Annotate.refresh());
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(300);
+    const dimensions = await page.evaluate(() => {
+      const overlay = document.getElementById('__an_overlay');
+      return {
+        viewport: window.innerWidth,
+        scrollWidth: document.documentElement.scrollWidth,
+        overlayWidth: overlay ? overlay.getBoundingClientRect().width : 0,
+      };
+    });
+    expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.viewport);
+    expect(dimensions.overlayWidth).toBeLessThanOrEqual(dimensions.viewport);
+  });
 });

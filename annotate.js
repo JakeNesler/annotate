@@ -922,8 +922,14 @@
     sizeOverlay();
   }
   function sizeOverlay() {
-    var w = Math.max(document.documentElement.scrollWidth, window.innerWidth);
-    var h = Math.max(document.documentElement.scrollHeight, window.innerHeight);
+    // The overlay participates in document scroll measurements. Reset it before
+    // measuring so a wide desktop overlay can shrink after a mobile resize
+    // instead of keeping the page horizontally scrollable.
+    overlay.style.width = "0";
+    overlay.style.height = "0";
+    var body = document.body;
+    var w = Math.max(document.documentElement.scrollWidth, body ? body.scrollWidth : 0, window.innerWidth);
+    var h = Math.max(document.documentElement.scrollHeight, body ? body.scrollHeight : 0, window.innerHeight);
     overlay.setAttribute("width", w);
     overlay.setAttribute("height", h);
     overlay.style.width = w + "px";

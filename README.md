@@ -17,6 +17,28 @@ That single line is the whole installation.
 
 ---
 
+## Cluster review room (this fork)
+
+This fork adds an optional, single-replica review service for agent plans and
+Markdown documents. It renders the document, overlays `annotate.js`, and returns
+an approval or structured change request to `reviewctl`.
+
+```bash
+# Run the room locally
+go run ./cmd/reviewd
+
+# In another shell: submit and wait
+go run ./cmd/reviewctl submit --server http://localhost:8080 plan.md
+go run ./cmd/reviewctl wait --server http://localhost:8080 SESSION_ID
+```
+
+`reviewctl wait --format json` is provider-neutral.
+`reviewctl wait --format claude-hook` emits a Claude Code `PreToolUse` decision.
+Sessions are intentionally ephemeral and expire after 24 hours. The supplied
+`deploy.yaml` exposes the room on the dev LAN through the IDP/Flux contract.
+
+---
+
 ## Why reviewjs?
 
 - **One `<script>` tag.** No build step, no framework, no signup.
