@@ -14,7 +14,7 @@ module.exports = defineConfig({
     { name: 'review-chromium', use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: {
-    command: 'PORT=4201 go run ./cmd/reviewd',
+    command: 'PORT=4201 REVIEW_ALLOWED_TARGETS=http://127.0.0.1:4301 REVIEW_PROXY_DOMAIN=127.0.0.1.nip.io:4201 go run ./cmd/reviewd',
     url: 'http://127.0.0.1:4201/health',
     reuseExistingServer: true,
     timeout: 30000,

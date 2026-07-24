@@ -28,6 +28,12 @@ type Server struct {
 	webRoot string
 	logger  *slog.Logger
 	md      goldmark.Markdown
+
+	// Live site review configuration (empty disables the proxy and preserves
+	// pure Markdown behavior). allowedTargets holds exact allowed origins.
+	allowedTargets map[string]struct{}
+	proxyDomain    string
+	proxyTransport http.RoundTripper
 }
 
 func NewServer(store *Store, webRoot string, logger *slog.Logger) *Server {
@@ -40,25 +46,32 @@ func NewServer(store *Store, webRoot string, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(os.Stdout, nil))
 	}
-	return &Server{
-		store:   store,
-		webRoot: webRoot,
-		logger:  logger,
-		md:      goldmark.New(goldmark.WithExtensions(extension.GFM)),
+	s := &Server{
+		store:          store,
+		webRoot:        webRoot,
+		logger:         logger,
+		md:             goldmark.New(goldmark.WithExtensions(extension.GFM)),
+		allowedTargets: allowedTargetsFromEnv(os.Getenv("REVIEW_ALLOWED_TARGETS")),
+		proxyDomain:    strings.ToLower(strings.TrimSpace(os.Getenv("REVIEW_PROXY_DOMAIN"))),
+		proxyTransport: http.DefaultTransport,
 	}
+	return s
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
 	mux.HandleFunc("POST /api/sessions", s.createSession)
+	mux.HandleFunc("POST /api/site-sessions", s.createSiteSession)
 	mux.HandleFunc("GET /api/sessions/{id}", s.getSession)
 	mux.HandleFunc("POST /api/sessions/{id}/decision", s.decide)
 	mux.HandleFunc("GET /r/{id}", s.reviewPage)
 	mux.HandleFunc("GET /annotate.js", s.staticFile("annotate.js", "text/javascript; charset=utf-8"))
 	mux.HandleFunc("GET /assets/{name}", s.asset)
 	mux.HandleFunc("GET /", s.launcherPage)
-	return s.securityHeaders(s.logRequests(mux))
+	// The per-session proxy host is detected ahead of the normal router so its
+	// responses keep the upstream's headers instead of the review room CSP.
+	return s.logRequests(s.proxyRouter(s.securityHeaders(mux)))
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
@@ -119,35 +132,40 @@ func (s *Server) getSession(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) decide(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
 	var input DecisionRequest
 	if err := decodeJSON(w, r, &input); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	input.Summary = strings.TrimSpace(input.Summary)
-	if input.Decision != StatusApproved && input.Decision != StatusChangesRequested {
+	s.applyDecision(w, r.PathValue("id"), input.Decision, input.Summary, input.Feedback)
+}
+
+// applyDecision validates and records a decision for either a Markdown review
+// (main host) or a live site review (reserved proxy endpoint).
+func (s *Server) applyDecision(w http.ResponseWriter, id, decision, summary string, feedback []json.RawMessage) {
+	summary = strings.TrimSpace(summary)
+	if decision != StatusApproved && decision != StatusChangesRequested {
 		writeError(w, http.StatusBadRequest, "decision must be approved or changes_requested")
 		return
 	}
-	if len(input.Feedback) > maxFeedback {
+	if len(feedback) > maxFeedback {
 		writeError(w, http.StatusBadRequest, "too many feedback items")
 		return
 	}
-	if input.Decision == StatusChangesRequested && input.Summary == "" && len(input.Feedback) == 0 {
+	if decision == StatusChangesRequested && summary == "" && len(feedback) == 0 {
 		writeError(w, http.StatusBadRequest, "requested changes need a summary or annotation")
 		return
 	}
-	for _, item := range input.Feedback {
+	for _, item := range feedback {
 		if !json.Valid(item) {
 			writeError(w, http.StatusBadRequest, "feedback contains invalid JSON")
 			return
 		}
 	}
 	session, err := s.store.Decide(id, Decision{
-		Decision: input.Decision,
-		Summary:  input.Summary,
-		Feedback: input.Feedback,
+		Decision: decision,
+		Summary:  summary,
+		Feedback: feedback,
 	})
 	if err != nil {
 		writeStoreError(w, err)
@@ -261,9 +279,17 @@ func writeJSONStatus(w http.ResponseWriter, status int, value any) {
 }
 
 func externalBaseURL(r *http.Request) string {
-	scheme := "http"
+	return forwardedScheme(r) + "://" + r.Host
+}
+
+// forwardedScheme resolves the request's external scheme: HTTP unless the
+// forwarded request is HTTPS.
+func forwardedScheme(r *http.Request) string {
 	if proto := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]); proto == "https" {
-		scheme = "https"
+		return "https"
 	}
-	return scheme + "://" + r.Host
+	if r.TLS != nil {
+		return "https"
+	}
+	return "http"
 }

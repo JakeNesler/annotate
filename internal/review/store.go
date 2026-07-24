@@ -2,6 +2,7 @@ package review
 
 import (
 	"crypto/rand"
+	"encoding/base32"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -43,24 +44,53 @@ func (s *Store) Create(title, markdown, rendered string) (*Session, error) {
 		return nil, err
 	}
 	now := s.now().UTC()
-	session := &Session{
+	return s.add(&Session{
 		ID:        id,
 		Title:     title,
+		Kind:      KindMarkdown,
 		Markdown:  markdown,
 		HTML:      rendered,
 		Status:    StatusPending,
 		CreatedAt: now,
 		ExpiresAt: now.Add(s.ttl),
-	}
+	}), nil
+}
 
+// CreateSite registers a live site review whose target is an absolute origin.
+// The session ID is a single DNS-safe label used as the per-session proxy host;
+// the decision token gates the reserved proxy decision endpoint.
+func (s *Store) CreateSite(title, target string) (*Session, error) {
+	id, err := newDNSID()
+	if err != nil {
+		return nil, err
+	}
+	token, err := newToken()
+	if err != nil {
+		return nil, err
+	}
+	now := s.now().UTC()
+	return s.add(&Session{
+		ID:            id,
+		Title:         title,
+		Kind:          KindSite,
+		Target:        target,
+		DecisionToken: token,
+		Status:        StatusPending,
+		CreatedAt:     now,
+		ExpiresAt:     now.Add(s.ttl),
+	}), nil
+}
+
+// add inserts a freshly built session under the store lock and returns a clone.
+func (s *Store) add(session *Session) *Session {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.cleanupLocked(now)
+	s.cleanupLocked(session.CreatedAt)
 	if len(s.sessions) >= s.max {
 		s.removeOldestLocked()
 	}
-	s.sessions[id] = session
-	return cloneSession(session), nil
+	s.sessions[session.ID] = session
+	return cloneSession(session)
 }
 
 func (s *Store) Get(id string) (*Session, error) {
@@ -131,4 +161,41 @@ func newID() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+// dnsEncoding is lowercase base32 (a-z, 2-7) so the encoded value is a valid,
+// case-insensitive DNS label with no padding or separators.
+var dnsEncoding = base32.NewEncoding("abcdefghijklmnopqrstuvwxyz234567").WithPadding(base32.NoPadding)
+
+// newDNSID returns a cryptographically random identifier usable as one DNS
+// label: it starts with a letter and contains only lowercase letters and
+// digits, well under the 63-character label limit.
+func newDNSID() (string, error) {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return "s" + dnsEncoding.EncodeToString(buf), nil
+}
+
+// newToken returns an unguessable per-session decision token.
+func newToken() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+// isDNSLabel reports whether host is one syntactically valid DNS label.
+func isDNSLabel(host string) bool {
+	if host == "" || len(host) > 63 || host[0] == '-' || host[len(host)-1] == '-' {
+		return false
+	}
+	for _, char := range host {
+		if (char < 'a' || char > 'z') && (char < '0' || char > '9') && char != '-' {
+			return false
+		}
+	}
+	return true
 }

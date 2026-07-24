@@ -56,7 +56,7 @@
     note: scriptData.note || globalConfig.note || "",
     share: String(scriptData.shareEmail || globalConfig.shareEmail || "").trim(),
   };
-  var PAGE = (CFG.project ? CFG.project + ":" : "") + CFG.page;
+  var PAGE = pageKey(CFG.page);
 
   // localStorage can be denied (private mode, sandboxed iframes) — never crash
   var store = {
@@ -134,6 +134,9 @@
   }
   function truthy(v) {
     return v === true || /^(1|true|yes|open)$/i.test(String(v || ""));
+  }
+  function pageKey(page) {
+    return (CFG.project ? CFG.project + ":" : "") + page;
   }
   function nameHue(name) {
     var h = 0, s = String(name || "");
@@ -2273,7 +2276,13 @@
     disable: function () { setEnabled(false); },
     setTool: function (t) { ensureEnabled(); setTool(t); },
     refresh: function () { load(); },
+    setPage: function (page) {
+      CFG.page = page || location.pathname;
+      PAGE = pageKey(CFG.page);
+      load();
+    },
     comments: function () { return state.comments.slice(); },
+    allComments: function () { return dbRead().comments.slice(); },
     focus: function (id) { focusComment(id, false); },
     toast: toast,
     export: function () { exportComments(); },

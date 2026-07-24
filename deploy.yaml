@@ -11,6 +11,9 @@ sizing:
 probes:
   type: http
   path: /health
+env:
+  REVIEW_ALLOWED_TARGETS: http://10.0.0.225:3000
+  REVIEW_PROXY_DOMAIN: 10.0.0.207.nip.io
 expose:
   lan: true
   host: annotate.lan

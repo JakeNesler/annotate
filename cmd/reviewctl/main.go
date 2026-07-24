@@ -54,6 +54,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runWait(args[1:], stdout, stderr)
 	case "review":
 		return runReview(args[1:], stdout, stderr)
+	case "site":
+		return runSite(args[1:], stdout, stderr)
 	case "help", "-h", "--help":
 		usage(stdout)
 		return 0
@@ -203,6 +205,51 @@ func runReview(args []string, stdout, stderr io.Writer) int {
 	return decisionExitCode(session)
 }
 
+func runSite(args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("site", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	server := fs.String("server", serverDefault(), "review server URL")
+	title := fs.String("title", "", "review title")
+	format := fs.String("format", "text", "decision output format: text, json, or claude-hook")
+	interval := fs.Duration("interval", 2*time.Second, "poll interval")
+	timeout := fs.Duration("timeout", 0, "maximum wait; zero waits indefinitely")
+	noOpen := fs.Bool("no-open", false, "print the review URL without launching a browser")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() != 1 {
+		fmt.Fprintln(stderr, "usage: reviewctl site [flags] <url>")
+		return 2
+	}
+	if strings.TrimSpace(*title) == "" {
+		*title = "Live site review"
+	}
+	c := newClient(*server)
+	created, err := c.submitSite(context.Background(), *title, fs.Arg(0))
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if *noOpen {
+		fmt.Fprintf(stderr, "Open this site review: %s\n", created.URL)
+	} else if err := openURL(created.URL); err != nil {
+		fmt.Fprintf(stderr, "Open this site review: %s\n", created.URL)
+	} else {
+		fmt.Fprintf(stderr, "Site review opened in your browser: %s\n", created.URL)
+	}
+	fmt.Fprintln(stderr, "Waiting for your comments...")
+	session, err := c.wait(context.Background(), created.ID, *interval, *timeout)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	if err := writeDecision(stdout, session, *format); err != nil {
+		fmt.Fprintln(stderr, err)
+		return 2
+	}
+	return decisionExitCode(session)
+}
+
 func newClient(server string) *client {
 	return &client{
 		base: strings.TrimRight(server, "/"),
@@ -216,6 +263,23 @@ func (c *client) submit(ctx context.Context, title, markdown string) (*review.Cr
 		return nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/api/sessions", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	var created review.CreateResponse
+	if err := c.do(req, &created); err != nil {
+		return nil, err
+	}
+	return &created, nil
+}
+
+func (c *client) submitSite(ctx context.Context, title, target string) (*review.CreateResponse, error) {
+	body, err := json.Marshal(review.SiteCreateRequest{Title: title, Target: target})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/api/site-sessions", bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -485,6 +549,7 @@ func usage(w io.Writer) {
 
 Usage:
   reviewctl review [flags] <file|->   open a browser, then wait for comments
+  reviewctl site [flags] <url>         open a live site through the review proxy
   reviewctl submit [flags] <file|->   create a review and print its URL
   reviewctl status [flags] <id>       print the current decision
   reviewctl wait [flags] <id>         wait for structured reviewer feedback

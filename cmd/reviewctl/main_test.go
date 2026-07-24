@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -103,6 +104,65 @@ func TestReviewOpensURLAndReturnsProviderNeutralFeedback(t *testing.T) {
 		"FEEDBACK RECEIVED",
 		"Test from another LAN client.",
 		`[highlight] Name the network boundary. (on "Verify the network path.") — Reviewer`,
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())
+		}
+	}
+}
+
+func TestSiteOpensProxyURLAndReturnsProviderNeutralFeedback(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = io.WriteString(w, `<html><body><h1>AnyRent</h1></body></html>`)
+	}))
+	t.Cleanup(upstream.Close)
+	t.Setenv("REVIEW_ALLOWED_TARGETS", upstream.URL)
+	t.Setenv("REVIEW_PROXY_DOMAIN", "review.test")
+	server := httptest.NewServer(review.NewServer(
+		review.NewStore(time.Hour, 10),
+		".",
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	).Handler())
+	t.Cleanup(server.Close)
+
+	previousOpenURL := openURL
+	t.Cleanup(func() { openURL = previousOpenURL })
+	var openedURL string
+	openURL = func(raw string) error {
+		openedURL = raw
+		u, err := url.Parse(raw)
+		if err != nil {
+			return err
+		}
+		id := strings.Split(u.Host, ".")[0]
+		go func() {
+			body := strings.NewReader(`{"decision":"changes_requested","summary":"Live route feedback.","feedback":[{"type":"pin","text":"Fix this rendered card.","author":"Reviewer","geom":{"selector":"#app","x":0.5,"y":0.5}}]}`)
+			response, err := http.Post(server.URL+"/api/sessions/"+id+"/decision", "application/json", body)
+			if err == nil {
+				_ = response.Body.Close()
+			}
+		}()
+		return nil
+	}
+
+	var stdout, stderr bytes.Buffer
+	exitCode := runSite([]string{
+		"--server", server.URL,
+		"--interval", "100ms",
+		upstream.URL,
+	}, &stdout, &stderr)
+
+	if exitCode != 3 {
+		t.Fatalf("exit code = %d, want feedback exit 3\nstdout:\n%s\nstderr:\n%s", exitCode, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(openedURL, ".review.test/") {
+		t.Fatalf("browser URL = %q, want per-session review.test host", openedURL)
+	}
+	for _, want := range []string{
+		"FEEDBACK RECEIVED",
+		"Live route feedback.",
+		"[pin] Fix this rendered card. (at #app, 50% across / 50% down) — Reviewer",
 	} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Fatalf("stdout missing %q:\n%s", want, stdout.String())

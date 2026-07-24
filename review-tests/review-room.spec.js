@@ -1,5 +1,62 @@
 // @ts-check
 const { test, expect } = require('@playwright/test');
+const http = require('http');
+
+const LIVE_TARGET = 'http://127.0.0.1:4301';
+let liveServer;
+
+test.beforeAll(async () => {
+  liveServer = http.createServer((req, res) => {
+    if (req.url === '/app.js') {
+      res.writeHead(200, { 'Content-Type': 'text/javascript' });
+      res.end(`
+        function render() {
+          const app = document.getElementById('app');
+          const route = location.pathname === '/rentals' ? 'Rentals' : 'Dashboard';
+          app.innerHTML = '<h1>' + route + '</h1><p class="copy">Rendered route ' + location.pathname + '</p><button id="load-state">Load state</button><pre id="state"></pre>';
+          document.getElementById('load-state').addEventListener('click', async () => {
+            const response = await fetch('/api/state?route=' + encodeURIComponent(location.pathname));
+            document.getElementById('state').textContent = await response.text();
+          });
+        }
+        document.addEventListener('click', (event) => {
+          const link = event.target.closest('a[data-link]');
+          if (!link) return;
+          event.preventDefault();
+          history.pushState({}, '', link.getAttribute('href'));
+          render();
+        });
+        addEventListener('popstate', render);
+        render();
+      `);
+      return;
+    }
+    if (req.url && req.url.startsWith('/api/state')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, url: req.url }));
+      return;
+    }
+    res.writeHead(200, {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Content-Security-Policy': "default-src 'self'; script-src 'self'; connect-src 'self'; style-src 'self' 'unsafe-inline'",
+    });
+    res.end(`<!doctype html>
+      <html>
+        <head><title>Fake SPA</title></head>
+        <body>
+          <nav><a href="/" data-link>Dashboard</a> <a href="/rentals" data-link>Rentals</a></nav>
+          <main id="app"></main>
+          <script src="/app.js"></script>
+        </body>
+      </html>`);
+  });
+  await new Promise((resolve) => liveServer.listen(4301, '127.0.0.1', resolve));
+});
+
+test.afterAll(async () => {
+  if (!liveServer) return;
+  await new Promise((resolve) => liveServer.close(resolve));
+});
 
 async function createReview(request, title = 'Flux rollout') {
   const response = await request.post('/api/sessions', {
@@ -50,6 +107,50 @@ test('comments are sent back to the waiting agent', async ({ page, request }) =>
   expect(session.decision.feedback).toHaveLength(1);
   expect(session.decision.feedback[0].text).toBe('Verify this from another LAN client.');
   expect(session.decision.feedback[0].author).toBe('Reviewer');
+});
+
+test('live SPA proxy collects comments across routes', async ({ page, request }) => {
+  const response = await request.post('/api/site-sessions', {
+    data: { title: 'Live AnyRent SPA', target: LIVE_TARGET },
+  });
+  expect(response.status()).toBe(201);
+  const created = await response.json();
+
+  await page.addInitScript(() => localStorage.setItem('an-author', 'Reviewer'));
+  await page.goto(created.url);
+  await page.waitForFunction(() => Boolean(window.Annotate && window.Annotate.allComments));
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+
+  await page.keyboard.press('p');
+  await page.locator('#app h1').click();
+  await page.locator('#__an_compose textarea').fill('Dashboard total is hard to scan.');
+  await page.locator('#__an_compose .an-primary').click();
+  await expect(page.locator('.an-pin')).toHaveCount(1);
+
+  await page.getByRole('link', { name: 'Rentals' }).click();
+  await expect(page.getByRole('heading', { name: 'Rentals' })).toBeVisible();
+  await page.getByRole('button', { name: 'Load state' }).click();
+  await expect(page.locator('#state')).toContainText('/api/state');
+
+  await page.keyboard.press('p');
+  await page.locator('#app h1').click();
+  await page.locator('#__an_compose textarea').fill('Rentals route needs an empty state.');
+  await page.locator('#__an_compose .an-primary').click();
+
+  await page.locator('#__annotate_site_note').fill('Review covers more than one SPA route.');
+  await page.locator('#__annotate_site_send').click();
+  await expect(page.locator('#__annotate_site_result')).toContainText('Comments sent');
+
+  const sessionResponse = await request.get('/api/sessions/' + created.id);
+  const session = await sessionResponse.json();
+  expect(session.status).toBe('changes_requested');
+  expect(session.decision.summary).toBe('Review covers more than one SPA route.');
+  expect(session.decision.feedback).toHaveLength(2);
+  expect(session.decision.feedback.map((item) => item.text).sort()).toEqual([
+    'Dashboard total is hard to scan.',
+    'Rentals route needs an empty state.',
+  ]);
+  expect(session.decision.feedback.some((item) => item.page.endsWith('/rentals'))).toBe(true);
 });
 
 test('desktop to mobile resize does not leave horizontal overflow', async ({ page, request }) => {
