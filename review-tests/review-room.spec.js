@@ -153,6 +153,67 @@ test('live SPA proxy collects comments across routes', async ({ page, request })
   expect(session.decision.feedback.some((item) => item.page.endsWith('/rentals'))).toBe(true);
 });
 
+for (const viewport of [
+  { width: 320, height: 568 },
+  { width: 390, height: 844 },
+]) {
+  test(`live site handoff stays compact at ${viewport.width}px`, async ({ page, request }) => {
+    const response = await request.post('/api/site-sessions', {
+      data: { title: `Compact ${viewport.width}px handoff`, target: LIVE_TARGET },
+    });
+    expect(response.status()).toBe(201);
+    const created = await response.json();
+
+    await page.setViewportSize(viewport);
+    await page.goto(created.url);
+    await page.waitForFunction(() => Boolean(window.Annotate));
+
+    const toggle = page.locator('#__annotate_site_toggle');
+    const panel = page.locator('#__annotate_site_panel');
+    await expect(toggle).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(panel).toBeHidden();
+
+    const collapsed = await toggle.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const toolbar = document.querySelector('#__an_bar').getBoundingClientRect();
+      return {
+        width: box.width,
+        height: box.height,
+        aboveToolbar: box.bottom < toolbar.top,
+        overflow: document.documentElement.scrollWidth > window.innerWidth,
+      };
+    });
+    expect(collapsed.width).toBeLessThanOrEqual(170);
+    expect(collapsed.height).toBeLessThanOrEqual(52);
+    expect(collapsed.aboveToolbar).toBe(true);
+    expect(collapsed.overflow).toBe(false);
+
+    await toggle.click();
+    await expect(panel).toBeVisible();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByLabel('Overall note')).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Send comments to agent' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Approve and continue' })).toBeVisible();
+
+    const expanded = await panel.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return {
+        width: box.width,
+        height: box.height,
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+      };
+    });
+    expect(expanded.width).toBeLessThanOrEqual(expanded.viewportWidth - 20);
+    expect(expanded.height).toBeLessThanOrEqual(expanded.viewportHeight * 0.73);
+
+    await page.getByRole('button', { name: 'Close review handoff' }).click();
+    await expect(panel).toBeHidden();
+    await expect(toggle).toBeFocused();
+  });
+}
+
 test('desktop to mobile resize does not leave horizontal overflow', async ({ page, request }) => {
   const created = await createReview(request, 'Responsive review');
   await page.setViewportSize({ width: 1440, height: 900 });
